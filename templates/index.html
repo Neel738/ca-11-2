@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CA: Group 11 - Voice Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        .session-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .session-info {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .session-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .session-button:hover {
+            background-color: #388E3C;
+        }
+        
+        .processing-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            border-radius: 10px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        .processing-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .processing-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .thinking-message {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .thinking-text {
+            margin-bottom: 4px;
+            font-style: italic;
+            color: #555;
+        }
+        
+        .thinking-dots {
+            display: flex;
+            align-items: center;
+            height: 20px;
+        }
+        
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #4CAF50;
+            margin-right: 4px;
+            opacity: 0.6;
+            animation: dot-pulse 1.4s infinite ease-in-out;
+        }
+        
+        .dot:nth-child(1) { animation-delay: 0s; }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes dot-pulse {
+            0%, 80%, 100% { 
+                transform: scale(0.8);
+                opacity: 0.6; 
+            }
+            40% { 
+                transform: scale(1.2);
+                opacity: 1; 
+            }
+        }
+        
+        .debug-panel {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            display: none;
+        }
+        
+        .debug-entry {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .debug-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .debug-time {
+            color: #666;
+            margin-right: 5px;
+        }
+        
+        .debug-event {
+            color: #0277bd;
+            font-weight: bold;
+        }
+        
+        .debug-toggle {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+        }
+        
+        .debug-toggle:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CA: Group 11 - Voice Assistant</h1>
+            <div class="session-controls">
+                <div class="session-info">Session ID: <span id="session-id">{{ session_id }}</span></div>
+                <a href="/end_session" class="session-button">New Session</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- Prominent Status Display -->
+            <div class="prominent-status" id="prominent-status">
+                <div class="status-badge" id="status-badge">Ready</div>
+            </div>
+
+            <div class="chat-container" id="chat-container">
+                <div class="processing-overlay" id="processing-overlay">
+                    <div class="processing-spinner"></div>
+                </div>
+                <div class="messages" id="messages">
+                    <!-- Message content will appear here -->
+                    <div class="message assistant-message">
+                        Hello! I'm your event planning assistant. How can I help you today?
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status indicator section -->
+            <div class="status-indicator">
+                <div id="status-text">Ready to listen</div>
+                <div class="indicator" id="status-indicator"></div>
+            </div>
+
+            <div class="controls">
+                <button id="mic-button" class="mic-button">
+                    <span class="mic-icon">🎤</span>
+                    <span id="mic-text">Talk</span>
+                </button>
+            </div>
+            
+            <div class="debug-toggle" id="debug-toggle">Show Debug Info</div>
+            <div class="debug-panel" id="debug-panel"></div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
