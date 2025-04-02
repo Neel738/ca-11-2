@@ -243,6 +243,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 scrollToBottom();
             }
         });
+
+        socket.on('tts_audio', (data) => {
+            console.log('Received tts_audio event', data);
+            // Create a Blob from the binary data (assuming WAV format)
+            const blob = new Blob([data], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const audioElement = new Audio(url);
+            audioElement.play().catch(err => console.error("Audio playback error:", err));
+        });
         
         socket.on('debug', (data) => {
             addDebugInfo(data.event, data);

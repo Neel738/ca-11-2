@@ -214,6 +214,8 @@ def process_audio_workflow():
         
         # 6. Send the response to the client
         emit('assistant_response', {'text': assistant_text})
+
+        assistant_responder.speak_response(assistant_text, socketio)
         
     except Exception as e:
         print(f"Error in process_audio_workflow: {str(e)}")

@@ -1,4 +1,6 @@
 import os
+import tempfile
+
 import openai
 from database import get_session_interactions
 from dotenv import load_dotenv
@@ -83,16 +85,34 @@ class AssistantResponder:
         finally:
             db_session.close()
 
-
-    def speak_response(self, text: str):
+    def speak_response(self, text: str, socketio):
         """
-        Convert the given text to speech using pyttsx3.
+        Generate TTS audio from the given text using pyttsx3,
+        then stream the audio file's binary data to the client via SocketIO.
         """
         if not text or not self.engine:
-            return  # Don't speak empty text or if engine not available
-        
+            return  # Don't process empty text or if engine not available
+
         try:
-            self.engine.say(text)
+            # Create a temporary file for the TTS output (WAV format)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                temp_filename = temp_file.name
+
+            # Instead of engine.say(), use save_to_file to create an audio file
+            self.engine.save_to_file(text, temp_filename)
             self.engine.runAndWait()
+
+            # Read the generated audio file as binary data
+            with open(temp_filename, "rb") as f:
+                audio_data = f.read()
+
+            # Clean up the temporary file
+            os.remove(temp_filename)
+
+            # Emit the binary audio data over SocketIO.
+            # On the client, you'll need to listen for the 'tts_audio' event,
+            # create a Blob (with type "audio/wav"), and play it.
+            socketio.emit("tts_audio", audio_data)
+
         except Exception as e:
-            print(f"Error in text-to-speech: {e}")
+            print(f"Error in text-to-speech streaming: {e}")
