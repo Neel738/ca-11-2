@@ -483,4 +483,87 @@ main {
         max-height: 250px;
         width: 100%;
     }
-} 
+}
+
+/* TTS Controls */
+.tts-controls {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+}
+
+.tts-toggle-btn {
+    display: flex;
+    align-items: center;
+    background-color: #f0f0f0;
+    color: #333;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 15px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tts-btn-content {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.tts-btn-label {
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+#tts-engine-text {
+    font-size: 14px;
+}
+
+.tts-toggle-btn.kokoro {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.tts-toggle-btn:hover {
+    opacity: 0.9;
+}
+
+.tts-toggle-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#tts-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+/* Deafen Button Styles */
+.deafen-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin: 10px 0;
+}
+
+.deafen-button {
+    background-color: #F44336;
+    color: white;
+    border: 2px solid #2196F3;
+    border-radius: 4px;
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.deafen-button.deafened {
+    background-color: #4CAF50;
+}
+
+.deafen-button:hover {
+    opacity: 0.9;
+}

@@ -43,7 +43,9 @@ pydantic_core==2.33.0
 python-dotenv==1.0.0
 python-engineio==4.11.2
 python-socketio==5.10.0
-pyttsx3==2.7
+pyttsx3==2.98
+kokoro>=0.9.2
+sounddevice
 regex==2024.11.6
 requests==2.32.3
 simple-websocket==1.1.0

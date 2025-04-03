@@ -94,6 +94,18 @@ def information():
     
     return render_template('information.html', authenticated=False)
 
+@app.route('/tts/engine', methods=['GET'])
+def get_tts_engine():
+    """Get the current TTS engine"""
+    engine = assistant_responder.get_tts_engine()
+    return {'engine': engine}
+
+@app.route('/tts/engine/<engine_name>', methods=['POST'])
+def set_tts_engine(engine_name):
+    """Switch TTS engine"""
+    result = assistant_responder.set_tts_engine(engine_name)
+    return result
+
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""
