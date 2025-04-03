@@ -1,118 +1,156 @@
 import os
 import tempfile
-
 import openai
 from database import get_session_interactions
 from dotenv import load_dotenv
-from flask_socketio import emit
+
 load_dotenv()
 
 
 class AssistantResponder:
-    """
-    A class that uses OpenAI to generate responses and also provides
-    text-to-speech capabilities for speaking the generated response.
-    """
+    """Generates responses using OpenAI and provides TTS capabilities"""
 
     def __init__(self, session_factory):
         self.session_factory = session_factory
-        api_key = os.getenv("OPENAI_API_KEY")
-        openai.api_key = api_key
-        
-        # Initialize TTS engine (optional)
-        self.engine = None
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+
+        # TTS engine settings
+        self.tts_engine = "pyttsx3"  # Default engine
+
+        # Initialize pyttsx3
         try:
             import pyttsx3
-            self.engine = pyttsx3.init()
-            print("Text-to-speech engine initialized successfully")
+            self.pyttsx3_engine = pyttsx3.init()
+            print("pyttsx3 initialized")
         except Exception as e:
-            print(f"Text-to-speech engine initialization failed: {e}")
-            print("Running without text-to-speech support")
+            self.pyttsx3_engine = None
+            print(f"pyttsx3 initialization failed: {e}")
+
+        # Kokoro TTS setup
+        self.kokoro_pipeline = None
+        self.kokoro_loaded = False
+        self.kokoro_voice = os.getenv("KOKORO_VOICE", "af_heart")
+        self.kokoro_speed = float(os.getenv("KOKORO_SPEED", "1.1"))
+        self.device = self._detect_device()
+
+    def _detect_device(self):
+        """Detect if CUDA is available for Kokoro"""
+        try:
+            import torch
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            return "cpu"
+
+    def _load_kokoro(self):
+        """Load the Kokoro TTS engine"""
+        if self.kokoro_loaded:
+            return True
+
+        try:
+            from kokoro import KPipeline
+            self.kokoro_pipeline = KPipeline(lang_code='a', device=self.device)
+            self.kokoro_loaded = True
+            return True
+        except ImportError:
+            print("To use Kokoro TTS: pip install kokoro torch soundfile")
+            return False
+        except Exception as e:
+            print(f"Error loading Kokoro: {e}")
+            return False
+
+    def set_tts_engine(self, engine_name):
+        """Switch TTS engine"""
+        if engine_name not in ["pyttsx3", "kokoro"]:
+            return {"success": False, "message": "Invalid TTS engine name"}
+
+        old_engine = self.tts_engine
+        self.tts_engine = engine_name
+
+        # Load kokoro if needed
+        if engine_name == "kokoro" and not self.kokoro_loaded:
+            if not self._load_kokoro():
+                self.tts_engine = "pyttsx3"
+                return {
+                    "success": False,
+                    "message": "Failed to load Kokoro. Using pyttsx3 instead.",
+                    "engine": "pyttsx3"
+                }
+
+        return {
+            "success": True,
+            "message": f"Switched from {old_engine} to {self.tts_engine}",
+            "engine": self.tts_engine
+        }
+
+    def get_tts_engine(self):
+        """Get the current TTS engine name"""
+        return self.tts_engine
 
     def get_response(self, session_id: int) -> str:
-        
-        """
-        Generate a response from OpenAI using all previous user and assistant
-        messages in the current session as the conversation context.
-        """
+        """Generate a response using conversation history"""
         db_session = self.session_factory()
         try:
-            print(f"Starting to generate response for session ID: {session_id}")
-            # 1) Get all interactions for the session
             interactions = get_session_interactions(self.session_factory, session_id)
 
-            # 2) Build a conversation context list of messages
-            #    We add a system prompt at the beginning to set the tone or instructions of the assistant
+            # Create messages with system prompt and conversation history
             messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful AI assistant that specializes in helping users plan events. "
-                        "You have access to the conversation so far. Respond in a concise, polite, and helpful way."
-                    )
-                }
+                {"role": "system",
+                 "content": "You are a helpful AI assistant that specializes in helping users plan events. Respond concisely and helpfully."}
             ]
 
-            # Sort interactions by timestamp (just in case they aren't sorted).
-            interactions_sorted = sorted(interactions, key=lambda x: x.timestamp)
+            for interaction in sorted(interactions, key=lambda x: x.timestamp):
+                messages.append({"role": interaction.role, "content": interaction.transcript})
 
-            # Convert each interaction to the appropriate role/content for the chat
-            for interaction in interactions_sorted:
-                if interaction.role == "assistant":
-                    messages.append({"role": "assistant", "content": interaction.transcript})
-                else:
-                    # We'll treat "user" as a normal user message
-                    messages.append({"role": "user", "content": interaction.transcript})
-
-            # 3) Call the OpenAI Chat Completion endpoint
-            print("Calling OpenAI API to generate response...")
-            # This is intentionally a blocking call - we want to show the thinking status while we wait
+            # Generate response
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
                 max_tokens=200,
-                temperature=0.7)
-            
-            # 4) Extract the assistant's text from the response
-            assistant_text = response.choices[0].message.content
-            print("Response generated successfully")
+                temperature=0.7
+            )
 
-            return assistant_text
-
+            return response.choices[0].message.content
         except Exception as e:
-            print(f"Error in generate_openai_response: {e}")
+            print(f"Error generating response: {e}")
             return "I'm sorry, but I ran into an error. Could you please try again?"
         finally:
             db_session.close()
 
     def speak_response(self, text: str, socketio):
-        """
-        Generate TTS audio from the given text using pyttsx3,
-        then stream the audio file's binary data to the client via SocketIO.
-        """
-        if not text or not self.engine:
-            return  # Don't process empty text or if engine not available
+        """Generate TTS audio and stream via SocketIO"""
+        if not text:
+            return
 
         try:
-            # Create a temporary file for the TTS output (WAV format)
+            # Create temp file for audio
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
                 temp_filename = temp_file.name
 
-            # Instead of engine.say(), use save_to_file to create an audio file
-            self.engine.save_to_file(text, temp_filename)
-            self.engine.runAndWait()
+            # Use Kokoro if selected and available
+            if self.tts_engine == "kokoro" and (self.kokoro_loaded or self._load_kokoro()):
+                import soundfile as sf
+                generator = self.kokoro_pipeline(text, voice=self.kokoro_voice, speed=self.kokoro_speed)
 
-            # Read the generated audio file as binary data
+                # Get the first audio chunk
+                for i, (gs, ps, audio) in enumerate(generator):
+                    if i == 0:
+                        sf.write(temp_filename, audio, 24000)
+                        break
+
+            # Use pyttsx3 as fallback
+            elif self.pyttsx3_engine:
+                self.pyttsx3_engine.save_to_file(text, temp_filename)
+                self.pyttsx3_engine.runAndWait()
+            else:
+                print("No TTS engine available")
+                return
+
+            # Read and emit the audio data
             with open(temp_filename, "rb") as f:
-                audio_data = f.read()
+                socketio.emit("tts_audio", f.read())
 
-            # Clean up the temporary file
+            # Clean up
             os.remove(temp_filename)
 
-            # Emit the binary audio data over SocketIO.
-            # On the client, you'll need to listen for the 'tts_audio' event,
-            # create a Blob (with type "audio/wav"), and play it.
-            socketio.emit("tts_audio", audio_data)
-
         except Exception as e:
-            print(f"Error in text-to-speech streaming: {e}")
+            print(f"Error in text-to-speech: {e}")
