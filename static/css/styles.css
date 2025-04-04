@@ -567,3 +567,74 @@ main {
 .deafen-button:hover {
     opacity: 0.9;
 }
+
+/* SLIDING THRESHOLD FOR SOUND EMISSIONS*/
+.threshold-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 15px;
+    gap: 10px;
+    width: 100%;
+}
+
+.threshold-label {
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.threshold-slider {
+    flex-grow: 1;
+    max-width: 150px;
+}
+
+.threshold-toggle {
+    background-color: #e1e1e1;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+.threshold-toggle:hover {
+    background-color: #d1d1d1;
+}
+
+.threshold-value {
+    font-size: 12px;
+    width: 80px;
+    text-align: left;
+}
+
+/* Acoustic styling */
+.advanced-acoustics-btn {
+    background-color: #f0f0f0;
+    border: none;
+    border-radius: 15px;
+    padding: 8px 15px;
+    margin-top: 15px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.advanced-acoustics-btn:hover {
+    background-color: #e0e0e0;
+}
+
+.energy-display {
+    font-size: 12px;
+    margin-left: 10px;
+    color: #555;
+    white-space: nowrap;
+}

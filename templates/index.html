@@ -213,6 +213,18 @@
                     <span id="mic-text">Talk</span>
                 </button>
             </div>
+
+            <button id="advanced-acoustics-btn" class="advanced-acoustics-btn">Show Advanced Acoustics</button>
+
+            <div class="threshold-controls" id="threshold-controls" style="display: none;">
+                <div class="threshold-label">Mic Sensitivity:</div>
+                <input type="range" id="threshold-slider" min="0" max="25" value="5" step="0.1" class="threshold-slider">
+                <button id="threshold-toggle" class="threshold-toggle">
+                    <span id="threshold-icon">🔊</span>
+                </button>
+                <div class="threshold-value" id="threshold-value">Off (Always Send)</div>
+                <div class="energy-display">Avg energy (1s): <span id="energy-value">0.000</span></div>
+            </div>
             
             <div class="debug-toggle" id="debug-toggle">Show Debug Info</div>
             <div class="debug-panel" id="debug-panel"></div>

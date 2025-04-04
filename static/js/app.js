@@ -12,6 +12,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const sessionId = document.getElementById('session-id').textContent;
     const statusBadge = document.getElementById('status-badge');
     const deafenButton = document.getElementById('deafen-button');
+    const thresholdSlider = document.getElementById('threshold-slider');
+    const thresholdToggle = document.getElementById('threshold-toggle');
+    const thresholdValue = document.getElementById('threshold-value');
+    const thresholdIcon = document.getElementById('threshold-icon');
 
     // App state
     let isRecording = false;
@@ -28,6 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentStatus = 'ready';
     let isTtsPlaying = false;
     let isAIDeafened = false;
+    let micEnergyThreshold = 0.005;
+    let isThresholdDisabled = true;
+    let energyHistory = [];
+    let energyUpdateInterval = null;
+    let showingAdvancedAcoustics = false;
 
     const ttsToggleBtn = document.getElementById('tts-toggle-btn');
     const ttsEngineText = document.getElementById('tts-engine-text');
@@ -174,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             addDebugInfo('connect', { status: 'connected' });
             updateStatus('ready', 'Ready to listen');
             reconnectAttempts = 0;
+            socket.emit('set_energy_threshold', { threshold: parseFloat(thresholdSlider.value) / 1000 });
         });
 
         socket.on('disconnect', () => {
@@ -196,28 +206,45 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Received status:', data);
             addDebugInfo('status', data);
 
-            if (data.status === 'listening') {
-                updateStatus('listening', 'Processing audio...');
-                isProcessing = false;
+            // --- IMPORTANT: Set isProcessing state correctly ---
+            if (data.status === 'processing' || data.status === 'transcribing' || data.status === 'thinking') {
+                isProcessing = true; // Set flag immediately when server signals these states
+                micButton.disabled = true;
+                processingOverlay.classList.add('active');
+            } else if (data.status === 'listening') {
+                 isProcessing = false; // Explicitly false for listening
+                 micButton.disabled = false;
+                 processingOverlay.classList.remove('active');
+            } else if (data.status === 'ready') {
+                isProcessing = false; // Reset flag when ready
                 micButton.disabled = false;
                 processingOverlay.classList.remove('active');
+            }
+            // --- End of important change ---
+
+
+            if (data.status === 'listening') {
+                updateStatus('listening', 'Processing audio...');
+                // isProcessing = false; // Moved above
+                // micButton.disabled = false; // Moved above
+                // processingOverlay.classList.remove('active'); // Moved above
             } else if (data.status === 'processing') {
                 updateStatus('processing', 'Processing response...');
-                isProcessing = true;
-                micButton.disabled = true;
-                processingOverlay.classList.add('active');
+                // isProcessing = true; // Moved above
+                // micButton.disabled = true; // Moved above
+                // processingOverlay.classList.add('active'); // Moved above
             } else if (data.status === 'transcribing') {
                 updateStatus('transcribing', 'Converting speech to text...');
-                isProcessing = true;
-                micButton.disabled = true;
-                processingOverlay.classList.add('active');
+                // isProcessing = true; // Moved above
+                // micButton.disabled = true; // Moved above
+                // processingOverlay.classList.add('active'); // Moved above
             } else if (data.status === 'thinking') {
                 console.log('Setting thinking status from status event');
                 updateStatus('thinking', 'Generating response...');
-                isProcessing = true;
+                // isProcessing = true; // Moved above
                 isThinking = true;
-                micButton.disabled = true;
-                processingOverlay.classList.add('active');
+                // micButton.disabled = true; // Moved above
+                // processingOverlay.classList.add('active'); // Moved above
 
                 // Force status badge update for thinking - with emphasized styling
                 console.log('FORCE UPDATING STATUS BADGE TO THINKING');
@@ -226,18 +253,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusBadge.classList.add('thinking');
             } else if (data.status === 'ready') {
                 updateStatus('ready', 'Ready to listen');
-                isProcessing = false;
-                micButton.disabled = false;
-                processingOverlay.classList.remove('active');
+                // isProcessing = false; // Moved above
+                isThinking = false; // Also reset thinking state here
+                // micButton.disabled = false; // Moved above
+                // processingOverlay.classList.remove('active'); // Moved above
 
                 // Force status badge update for ready state
                 statusBadge.textContent = 'Ready';
                 statusBadge.classList.remove('listening', 'transcribing', 'thinking', 'processing', 'error');
 
-                // Re-enable microphone after processing if it was active before
-                if (!isRecording && micButton.classList.contains('muted')) {
-                    startRecording();
-                }
+                // Re-enable microphone recording *only if* the mic button wasn't manually stopped
+                 if (micButton.classList.contains('muted') && !isRecording) {
+                    // Check if the user intended to stop recording or if it was stopped by processing
+                    // A simple heuristic: if the button still shows 'Stop', the user didn't click it.
+                    // This logic might need refinement based on exact desired UX.
+                     console.log("Attempting to auto-restart recording after processing.");
+                     startRecording();
+                 }
             }
         });
 
@@ -469,9 +501,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Create script processor node to process audio data
             processorNode = audioContext.createScriptProcessor(4096, 1, 1);
 
+            // This is the startRecording function
             processorNode.onaudioprocess = (e) => {
-                // Sometimes just don't give the audio to the backend
-                if (!isRecording || isTtsPlaying || isAIDeafened) return;
+                // Check ALL conditions that should stop audio transmission
+                if (!isRecording || isTtsPlaying || isAIDeafened || isProcessing) {
+                    // If any of these are true, simply return and don't send audio
+                    return;
+                }
 
                 // Convert audio data to Float32Array
                 const inputData = e.inputBuffer.getChannelData(0);
@@ -481,11 +517,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // Only send if there's actual audio data (not silence)
+                // Calculate energy for display purposes only
                 const energy = Math.sqrt(inputData.reduce((acc, val) => acc + val * val, 0) / inputData.length);
-                if (energy > 0.001) {
-                    socket.emit('audio_data', inputData);
+                // console.log(energy); // Keep commented unless debugging energy
+
+                if (showingAdvancedAcoustics) {
+                    energyHistory.push(energy);
+                    const historyLength = Math.ceil(audioContext.sampleRate / 4096);
+                    if (energyHistory.length > historyLength) {
+                        energyHistory = energyHistory.slice(-historyLength);
+                    }
                 }
+
+                // Send audio data if all checks passed
+                socket.emit('audio_data', inputData);
             };
 
             // Connect nodes
@@ -497,6 +542,10 @@ document.addEventListener('DOMContentLoaded', () => {
             micButton.classList.add('muted');
             micText.textContent = 'Stop';
             updateStatus('listening', 'Processing audio...');
+
+            if (showingAdvancedAcoustics) {
+                startEnergyUpdateInterval();
+            }
 
         } catch (error) {
             console.error('Error accessing microphone:', error);
@@ -536,6 +585,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        clearInterval(energyUpdateInterval);
+        energyUpdateInterval = null;
+        energyHistory = [];
+
         // Update UI
         isRecording = false;
         micButton.classList.remove('muted');
@@ -570,9 +623,86 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function toggleAdvancedAcoustics() {
+        showingAdvancedAcoustics = !showingAdvancedAcoustics;
+        const thresholdControls = document.getElementById('threshold-controls');
+        const advancedBtn = document.getElementById('advanced-acoustics-btn');
+
+        if (showingAdvancedAcoustics) {
+            thresholdControls.style.display = 'flex';
+            advancedBtn.textContent = 'Hide Advanced Acoustics';
+
+            // Start updating energy display if recording
+            if (isRecording) {
+                startEnergyUpdateInterval();
+            }
+        } else {
+            thresholdControls.style.display = 'none';
+            advancedBtn.textContent = 'Show Advanced Acoustics';
+
+            // Stop updating energy display
+            clearInterval(energyUpdateInterval);
+            energyUpdateInterval = null;
+        }
+    }
+
+    function startEnergyUpdateInterval() {
+        if (!energyUpdateInterval) {
+            energyUpdateInterval = setInterval(updateEnergyDisplay, 100); // Update every 100ms
+        }
+    }
+
+    function updateEnergyDisplay() {
+        const energyValue = document.getElementById('energy-value');
+
+        if (energyHistory.length > 0) {
+            // Calculate rolling mean
+            const rollingMean = energyHistory.reduce((sum, value) => sum + value, 0) / energyHistory.length;
+            energyValue.textContent = rollingMean.toFixed(6);
+        }
+    }
+
     // Event listeners
     micButton.addEventListener('click', toggleRecording);
     deafenButton.addEventListener('click', toggleDeafenAI);
+    document.getElementById('advanced-acoustics-btn').addEventListener('click', toggleAdvancedAcoustics);
+
+    // Add event handlers for threshold controls
+    thresholdSlider.addEventListener('input', function() {
+        // Calculate threshold from slider value
+        const threshold = parseFloat(this.value) / 1000;
+        thresholdValue.textContent = threshold.toFixed(4);
+
+        // Send the new threshold to the server
+        socket.emit('set_energy_threshold', { threshold: threshold });
+
+        addDebugInfo('threshold_change', { value: threshold });
+    });
+
+    thresholdToggle.addEventListener('click', function() {
+        isThresholdDisabled = !isThresholdDisabled;
+
+        if (isThresholdDisabled) {
+            thresholdIcon.textContent = '🔊';
+            thresholdSlider.disabled = true;
+            thresholdValue.textContent = 'Off (Always Send)';
+            addDebugInfo('threshold_disabled', { status: 'disabled' });
+        } else {
+            thresholdIcon.textContent = '🔇';
+            thresholdSlider.disabled = false;
+            // Restore the threshold value based on slider position
+            micEnergyThreshold = parseFloat(thresholdSlider.value) / 1000;
+            thresholdValue.textContent = micEnergyThreshold.toFixed(4);
+            addDebugInfo('threshold_enabled', { value: micEnergyThreshold });
+        }
+    });
+
+    // Инициализировать эти пороговые штуки как типа "выключенные"
+    thresholdToggle.style.display = 'none'; // Hide the toggle button
+    thresholdSlider.disabled = false; // Enable the slider
+    document.querySelector('.threshold-label').textContent = 'Server Mic Sensitivity:';
+    const initialThreshold = parseFloat(thresholdSlider.value) / 1000;
+    thresholdValue.textContent = initialThreshold.toFixed(4);
 
     // Initialize socket connection
     connectSocket();

@@ -32,13 +32,12 @@ class SpeechRecognizer:
             if len(audio_chunk) < 10:
                 return None
 
-            self.audio_buffer.append(audio_chunk)
-
             # Check if audio contains speech or silence
             energy = np.mean(np.abs(audio_chunk))
             current_time = time.time()
 
             if energy > self.ENERGY_THRESHOLD:
+                self.audio_buffer.append(audio_chunk)
                 self.is_speaking = True
                 self.last_audio_time = current_time
                 return "listening"
@@ -46,11 +45,14 @@ class SpeechRecognizer:
                 # Silence detected after speech
                 self.is_speaking = False
                 return "processing"
+            elif self.is_speaking:
+                self.audio_buffer.append(audio_chunk)
 
             return None
         except Exception as e:
             print(f"Error processing audio chunk: {str(e)}")
             return None
+
 
     def process_audio(self):
         """Process the complete audio buffer and transcribe using Whisper"""
@@ -151,3 +153,11 @@ class SpeechRecognizer:
             # Clear buffer on error
             self.audio_buffer = []
             return None
+
+    def set_energy_threshold(self, threshold):
+        """Update the energy threshold used for speech detection"""
+        if isinstance(threshold, (float, int)) and threshold > 0:
+            self.ENERGY_THRESHOLD = float(threshold)
+            print(f"Updated energy threshold to {self.ENERGY_THRESHOLD}")
+            return True
+        return False

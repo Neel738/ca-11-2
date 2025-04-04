@@ -133,6 +133,16 @@ def handle_audio_data(data):
         if status == "processing":
             process_audio_workflow()
 
+@socketio.on('set_energy_threshold')
+def handle_energy_threshold(data):
+    """Set the energy threshold for the speech recognizer"""
+    try:
+        threshold = float(data.get('threshold', 0.005))
+        success = speech_recognizer.set_energy_threshold(threshold)
+        emit('threshold_update', {'success': success, 'threshold': threshold})
+    except (ValueError, TypeError) as e:
+        emit('threshold_update', {'success': False, 'error': str(e)})
+
 def process_audio_workflow():
     """Complete workflow for processing audio and generating response"""
     global current_session_id
