@@ -3,7 +3,7 @@ import sqlite3
 import sqlite_vec
 from sqlite_vec import serialize_float32
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
+import openai
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -13,7 +13,16 @@ class RAG:
     def __init__(self, db_path: str, embedding_dim: int = 1536):
         self.db_path = db_path
         self.embedding_dim = embedding_dim
-        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY')) if os.getenv('OPENAI_API_KEY') else None
+
+        # Set API key directly for older OpenAI SDK
+        api_key = os.getenv('OPENAI_API_KEY')
+        if api_key:
+            openai.api_key = api_key
+            self.has_api_key = True
+        else:
+            self.has_api_key = False
+            print("WARNING: No OpenAI API key found")
+
         self.setup_db()
 
     def make_connect(self):
@@ -33,10 +42,14 @@ class RAG:
             print("Exception in setup_db", e)
 
     def generate_embedding(self, text: str) -> Optional[List[float]]:
-        if not self.client or not text or text.strip() == "": return None
+        if not self.has_api_key or not text or text.strip() == "": return None
         try:
-            response = self.client.embeddings.create(model="text-embedding-3-small", input=text)
-            return response.data[0].embedding
+            # Old API format for embeddings
+            response = openai.Embedding.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return response["data"][0]["embedding"]
         except Exception as e:
             print("Exception in generate_embedding:", e)
             return None
